@@ -1,12 +1,9 @@
 """Main MCP server implementation for Aspen Plus."""
 
-import asyncio
 import logging
 import sys
-from typing import Any
 
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
+from mcp.server.mcpserver import MCPServer
 
 from .aspen_wrapper import AspenPlusWrapper
 from .tools import register_tools
@@ -21,30 +18,24 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def main():
-    """Run the Aspen Plus MCP server."""
-    server = Server("aspenplus-mcp")
+def create_server() -> MCPServer:
+    """Create the Aspen Plus MCP server with all tools and resources registered."""
+    mcp = MCPServer("aspenplus-mcp")
 
     # Initialize Aspen Plus wrapper
     aspen = AspenPlusWrapper()
 
     # Register tools and resources
-    register_tools(server, aspen)
-    register_resources(server, aspen)
+    register_tools(mcp, aspen)
+    register_resources(mcp, aspen)
 
-    logger.info("Starting Aspen Plus MCP server")
-
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(
-            read_stream,
-            write_stream,
-            server.create_initialization_options()
-        )
+    return mcp
 
 
 def run():
     """Console script entry point (used by `aspenplus-mcp` / `uv run aspenplus-mcp`)."""
-    asyncio.run(main())
+    logger.info("Starting Aspen Plus MCP server")
+    create_server().run("stdio")
 
 
 if __name__ == "__main__":

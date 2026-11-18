@@ -1,271 +1,129 @@
 """MCP tool implementations for Aspen Plus operations."""
 
 import logging
-from typing import Any
+from collections.abc import Callable
+from typing import Annotated, Any, TypeVar
 
-from mcp.server import Server
-from mcp.types import Tool, TextContent
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
+from pydantic import Field
 
 from .aspen_wrapper import AspenPlusWrapper
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar("T")
 
-def register_tools(server: Server, aspen: AspenPlusWrapper):
-    """Register all Aspen Plus tools with the MCP server."""
+def _call(tool: str, fn: Callable[..., T], *args: Any) -> T:
+    """Run a wrapper call and turn failures into ToolError.
 
-    @server.list_tools()
-    async def list_tools() -> list[Tool]:
-        """List available tools."""
-        return [
-            Tool(
-                name="open_simulation",
-                description="Open an Aspen Plus simulation file (.bkp or .apw)",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "filepath": {
-                            "type": "string",
-                            "description": "Path to the Aspen Plus simulation file"
-                        },
-                        "use_enhanced": {
-                            "type": "boolean",
-                            "description": "Use enhanced interface with block/stream manipulation capabilities (default: false)"
-                        }
-                    },
-                    "required": ["filepath"]
-                }
-            ),
-            Tool(
-                name="run_simulation",
-                description="Run the current Aspen Plus simulation",
-                inputSchema={
-                    "type": "object",
-                    "properties": {}
-                }
-            ),
-            Tool(
-                name="get_value",
-                description="Get a value from the simulation using a node path",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "Node path (e.g., \\Data\\Streams\\S1\\Output\\TEMP_OUT\\MIXED\\MIXED)"
-                        }
-                    },
-                    "required": ["path"]
-                }
-            ),
-            Tool(
-                name="set_value",
-                description="Set a value in the simulation using a node path",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "Node path to the parameter"
-                        },
-                        "value": {
-                            "description": "Value to set (can be number or string)"
-                        }
-                    },
-                    "required": ["path", "value"]
-                }
-            ),
-            Tool(
-                name="close_simulation",
-                description="Close the current Aspen Plus simulation",
-                inputSchema={
-                    "type": "object",
-                    "properties": {}
-                }
-            ),
-            Tool(
-                name="place_block",
-                description="Place a new equipment block in the flowsheet (requires enhanced interface)",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "block_name": {
-                            "type": "string",
-                            "description": "Name for the new block"
-                        },
-                        "equipment_type": {
-                            "type": "string",
-                            "description": "Type of equipment (Mixer, Heater, Flash2, Radfrac, DSTWU, RPLUG, RCSTR, RYIELD)"
-                        }
-                    },
-                    "required": ["block_name", "equipment_type"]
-                }
-            ),
-            Tool(
-                name="delete_block",
-                description="Delete an equipment block from the flowsheet (requires enhanced interface)",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "block_name": {
-                            "type": "string",
-                            "description": "Name of the block to delete"
-                        }
-                    },
-                    "required": ["block_name"]
-                }
-            ),
-            Tool(
-                name="place_stream",
-                description="Place a new stream in the flowsheet (requires enhanced interface)",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "stream_name": {
-                            "type": "string",
-                            "description": "Name for the new stream"
-                        },
-                        "stream_type": {
-                            "type": "string",
-                            "description": "Type of stream: MATERIAL, HEAT, or WORK (default: MATERIAL)"
-                        }
-                    },
-                    "required": ["stream_name"]
-                }
-            ),
-            Tool(
-                name="connect_stream",
-                description="Connect a stream to a block port (requires enhanced interface)",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "block_name": {
-                            "type": "string",
-                            "description": "Name of the block"
-                        },
-                        "stream_name": {
-                            "type": "string",
-                            "description": "Name of the stream"
-                        },
-                        "port_name": {
-                            "type": "string",
-                            "description": "Name of the port on the block"
-                        }
-                    },
-                    "required": ["block_name", "stream_name", "port_name"]
-                }
-            ),
-            Tool(
-                name="save_simulation",
-                description="Save the simulation to file (requires enhanced interface)",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "filename": {
-                            "type": "string",
-                            "description": "Optional: new filename to save as"
-                        }
-                    }
-                }
-            )
-        ]
+    ToolError messages are passed to the model (with is_error=True); any other
+    exception would only be reported as a generic "Error executing tool".
+    """
+    try:
+        return fn(*args)
+    except Exception as e:
+        logger.error(f"Tool {tool} failed: {e}")
+        raise ToolError(str(e)) from e
 
-    @server.call_tool()
-    async def call_tool(name: str, arguments: Any) -> list[TextContent]:
-        """Handle tool calls."""
-        try:
-            if name == "open_simulation":
-                filepath = arguments["filepath"]
-                use_enhanced = arguments.get("use_enhanced", False)
-                aspen.open_file(filepath, use_enhanced=use_enhanced)
-                mode = "enhanced" if use_enhanced else "basic"
-                return [TextContent(
-                    type="text",
-                    text=f"Successfully opened simulation ({mode} mode): {filepath}"
-                )]
 
-            elif name == "run_simulation":
-                aspen.run_simulation()
-                return [TextContent(
-                    type="text",
-                    text="Simulation completed successfully"
-                )]
+def register_tools(mcp: MCPServer, aspen: AspenPlusWrapper) -> None:
+    """Register all Aspen Plus tools with the MCP server.
 
-            elif name == "get_value":
-                path = arguments["path"]
-                value = aspen.get_value(path)
-                return [TextContent(
-                    type="text",
-                    text=f"Value at {path}: {value}"
-                )]
+    The tools are declared ``async`` on purpose: MCPServer runs sync tools in
+    worker threads, but the Aspen Plus COM objects are apartment-threaded and
+    must be used from the thread that created them. Async tools run on the
+    event loop thread, so all COM calls stay on one thread.
+    """
 
-            elif name == "set_value":
-                path = arguments["path"]
-                value = arguments["value"]
-                aspen.set_value(path, value)
-                return [TextContent(
-                    type="text",
-                    text=f"Successfully set {path} to {value}"
-                )]
+    @mcp.tool()
+    async def open_simulation(
+        filepath: Annotated[str, Field(description="Path to the Aspen Plus simulation file")],
+        use_enhanced: Annotated[
+            bool,
+            Field(description="Use enhanced interface with block/stream manipulation capabilities"),
+        ] = False,
+    ) -> str:
+        """Open an Aspen Plus simulation file (.bkp or .apw)"""
+        _call("open_simulation", aspen.open_file, filepath, use_enhanced)
+        mode = "enhanced" if use_enhanced else "basic"
+        return f"Successfully opened simulation ({mode} mode): {filepath}"
 
-            elif name == "close_simulation":
-                aspen.close()
-                return [TextContent(
-                    type="text",
-                    text="Simulation closed"
-                )]
+    @mcp.tool()
+    async def run_simulation() -> str:
+        """Run the current Aspen Plus simulation"""
+        _call("run_simulation", aspen.run_simulation)
+        return "Simulation completed successfully"
 
-            elif name == "place_block":
-                block_name = arguments["block_name"]
-                equipment_type = arguments["equipment_type"]
-                aspen.place_block(block_name, equipment_type)
-                return [TextContent(
-                    type="text",
-                    text=f"Successfully placed {equipment_type} block: {block_name}"
-                )]
+    @mcp.tool()
+    async def get_value(
+        path: Annotated[
+            str,
+            Field(description="Node path (e.g., \\Data\\Streams\\S1\\Output\\TEMP_OUT\\MIXED\\MIXED)"),
+        ],
+    ) -> str:
+        """Get a value from the simulation using a node path"""
+        value = _call("get_value", aspen.get_value, path)
+        return f"Value at {path}: {value}"
 
-            elif name == "delete_block":
-                block_name = arguments["block_name"]
-                aspen.delete_block(block_name)
-                return [TextContent(
-                    type="text",
-                    text=f"Successfully deleted block: {block_name}"
-                )]
+    @mcp.tool()
+    async def set_value(
+        path: Annotated[str, Field(description="Node path to the parameter")],
+        value: Annotated[int | float | str, Field(description="Value to set (number or string)")],
+    ) -> str:
+        """Set a value in the simulation using a node path"""
+        _call("set_value", aspen.set_value, path, value)
+        return f"Successfully set {path} to {value}"
 
-            elif name == "place_stream":
-                stream_name = arguments["stream_name"]
-                stream_type = arguments.get("stream_type", "MATERIAL")
-                aspen.place_stream(stream_name, stream_type)
-                return [TextContent(
-                    type="text",
-                    text=f"Successfully placed {stream_type} stream: {stream_name}"
-                )]
+    @mcp.tool()
+    async def close_simulation() -> str:
+        """Close the current Aspen Plus simulation"""
+        _call("close_simulation", aspen.close)
+        return "Simulation closed"
 
-            elif name == "connect_stream":
-                block_name = arguments["block_name"]
-                stream_name = arguments["stream_name"]
-                port_name = arguments["port_name"]
-                aspen.connect_stream(block_name, stream_name, port_name)
-                return [TextContent(
-                    type="text",
-                    text=f"Successfully connected {stream_name} to {block_name}.{port_name}"
-                )]
+    @mcp.tool()
+    async def place_block(
+        block_name: Annotated[str, Field(description="Name for the new block")],
+        equipment_type: Annotated[
+            str,
+            Field(description="Type of equipment (Mixer, Heater, Flash2, Radfrac, DSTWU, RPLUG, RCSTR, RYIELD)"),
+        ],
+    ) -> str:
+        """Place a new equipment block in the flowsheet (requires enhanced interface)"""
+        _call("place_block", aspen.place_block, block_name, equipment_type)
+        return f"Successfully placed {equipment_type} block: {block_name}"
 
-            elif name == "save_simulation":
-                filename = arguments.get("filename")
-                aspen.save_simulation(filename)
-                msg = f"Saved as {filename}" if filename else "Saved simulation"
-                return [TextContent(
-                    type="text",
-                    text=msg
-                )]
+    @mcp.tool()
+    async def delete_block(
+        block_name: Annotated[str, Field(description="Name of the block to delete")],
+    ) -> str:
+        """Delete an equipment block from the flowsheet (requires enhanced interface)"""
+        _call("delete_block", aspen.delete_block, block_name)
+        return f"Successfully deleted block: {block_name}"
 
-            else:
-                raise ValueError(f"Unknown tool: {name}")
+    @mcp.tool()
+    async def place_stream(
+        stream_name: Annotated[str, Field(description="Name for the new stream")],
+        stream_type: Annotated[str, Field(description="Type of stream: MATERIAL, HEAT, or WORK")] = "MATERIAL",
+    ) -> str:
+        """Place a new stream in the flowsheet (requires enhanced interface)"""
+        _call("place_stream", aspen.place_stream, stream_name, stream_type)
+        return f"Successfully placed {stream_type} stream: {stream_name}"
 
-        except Exception as e:
-            logger.error(f"Tool {name} failed: {e}")
-            return [TextContent(
-                type="text",
-                text=f"Error: {str(e)}"
-            )]
+    @mcp.tool()
+    async def connect_stream(
+        block_name: Annotated[str, Field(description="Name of the block")],
+        stream_name: Annotated[str, Field(description="Name of the stream")],
+        port_name: Annotated[str, Field(description="Name of the port on the block")],
+    ) -> str:
+        """Connect a stream to a block port (requires enhanced interface)"""
+        _call("connect_stream", aspen.connect_stream, block_name, stream_name, port_name)
+        return f"Successfully connected {stream_name} to {block_name}.{port_name}"
+
+    @mcp.tool()
+    async def save_simulation(
+        filename: Annotated[str | None, Field(description="Optional: new filename to save as")] = None,
+    ) -> str:
+        """Save the simulation to file (requires enhanced interface)"""
+        _call("save_simulation", aspen.save_simulation, filename)
+        return f"Saved as {filename}" if filename else "Saved simulation"

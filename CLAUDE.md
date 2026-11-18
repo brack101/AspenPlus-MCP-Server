@@ -39,7 +39,7 @@ uv run black src/
   - Basic mode: Direct COM access for reading/writing values
   - Enhanced mode: Advanced interface with flowsheet manipulation capabilities
 - **aspen_interface.py**: Extended Aspen Plus automation library (vendored from AspenPlus-Python-Interface)
-- **tools.py**: MCP tool implementations with 11 tools including flowsheet editing
+- **tools.py**: MCP tool implementations with 10 tools including flowsheet editing
 - **resources.py**: MCP resource endpoints (simulation status)
 
 ### Aspen Plus Integration
@@ -58,11 +58,11 @@ The project uses `win32com.client` (pywin32) to communicate with Aspen Plus via 
 
 ### MCP Implementation
 
-Tools are registered using decorators from the MCP SDK:
-- `@server.list_tools()` - Define available tools
-- `@server.call_tool()` - Handle tool execution
-- `@server.list_resources()` - Define resources
-- `@server.read_resource()` - Handle resource reads
+Uses the high-level `MCPServer` API of the MCP Python SDK 2.x (`mcp.server.mcpserver`, formerly `FastMCP`):
+- `@mcp.tool()` - Each tool is a typed function; the input schema is generated from type hints (`Annotated[..., Field(description=...)]`), the docstring becomes the tool description
+- `@mcp.resource(uri, ...)` - Static resources (e.g. `simulation://status`)
+- Errors: raise `ToolError` (from `mcp.server.mcpserver.exceptions`) so the message reaches the model with `isError: true`; other exceptions only yield a generic error
+- **Tools must stay `async def`**: MCPServer runs sync tools in worker threads, but Aspen Plus COM objects are apartment-threaded and must be used from the thread that created them
 
 ### Platform Limitations
 
