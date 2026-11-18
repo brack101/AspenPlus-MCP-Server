@@ -11,7 +11,7 @@ AspenPlusMCP - A Model Context Protocol (MCP) server for Aspen Plus integration.
 ### Setup
 ```bash
 # Create .venv and install package (editable) + dev dependencies
-uv sync
+uv sync --locked
 
 # Add dependencies
 uv add <package>          # runtime
@@ -21,7 +21,7 @@ uv add --dev <package>    # dev (dependency-groups)
 ### Running
 ```bash
 # Run the MCP server
-uv run aspenplus-mcp
+uv run --locked aspenplus-mcp
 
 # Run tests
 uv run pytest
@@ -75,6 +75,18 @@ Uses the high-level `MCPServer` API of the MCP Python SDK 2.x (`mcp.server.mcpse
 - `test_wrapper_calls_stay_on_event_loop_thread` guards the COM thread-affinity requirement (fails if a tool becomes a sync `def`)
 - `tests/test_aspen_wrapper.py` tests enhanced mode against a fake `py2aspen` module (`build_fake_py2aspen()`), whose logger writes to stdout like loguru does
 - New tools: add them to `EXPECTED_TOOLS`, the forwarding parametrization, the thread test, and `FakeAspen`
+
+### Dependency updates (supply chain)
+
+The MCP server runs with the user's privileges and is started automatically by Claude, so dependencies are treated as untrusted until reviewed:
+
+- **uv only, always `--locked`**: `uv.lock` pins every package with SHA-256 hashes; `uv sync --locked` / `uv run --locked` fail if it is out of date. There is deliberately no pip install path (pip ignores the lock file).
+- **Cooldown**: `[tool.uv] exclude-newer` in `pyproject.toml` limits resolution to versions uploaded before that date. Never resolve against "now": when updating, set it to ~7 days before today, then `uv lock --upgrade` (or `--upgrade-package <name>`).
+- **Never change `uv.lock` incidentally**: dependency updates go into their own commit (`pyproject.toml` + `uv.lock`), with the lock diff reviewed.
+- **py2aspen** (single maintainer, pre-1.0) is pinned exactly (`==`). To update:
+  1. Read the diff between the old and new tag on GitHub (~2000 lines, feasible)
+  2. Check that the PyPI wheel matches the git tag (unzip the wheel, `diff -r` against `src/py2aspen` at the tag)
+  3. Bump the pin and `exclude-newer`, `uv lock --upgrade-package py2aspen`, run tests, then test enhanced mode on Windows with Aspen Plus
 
 ### Platform Limitations
 

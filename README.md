@@ -34,19 +34,11 @@ winget install --id=astral-sh.uv -e
 
 3. Create the environment and install all dependencies:
 ```bash
-uv sync
+uv sync --locked
 ```
 This creates a `.venv` in the project folder, installs a suitable Python version if needed, and installs the package in editable mode (incl. dev tools).
 
-<details>
-<summary>Alternative: plain pip</summary>
-
-```bash
-python -m venv .venv
-.venv\Scripts\activate        # Linux/macOS: source .venv/bin/activate
-pip install -e .
-```
-</details>
+Installation is only supported via uv: all dependencies are pinned in `uv.lock` with SHA-256 hashes, and `--locked` makes uv fail instead of silently re-resolving if `uv.lock` does not match `pyproject.toml`. A plain `pip install` would ignore the lock file and its hashes.
 
 ## Usage
 
@@ -91,7 +83,7 @@ Enhanced mode uses [py2aspen](https://github.com/adk23333/py2aspen) for flowshee
 
 ## Development
 
-`uv sync` already installs the dev dependencies (pytest, black, mypy).
+`uv sync --locked` already installs the dev dependencies (pytest, black, mypy).
 
 Run tests:
 ```bash
@@ -103,7 +95,7 @@ Format code:
 uv run black src/
 ```
 
-Add a dependency:
+Add a dependency (commit `pyproject.toml` and `uv.lock` together):
 ```bash
 uv add <package>          # runtime dependency
 uv add --dev <package>    # dev dependency
@@ -111,12 +103,12 @@ uv add --dev <package>    # dev dependency
 
 ## Configuration with Claude
 
-In all examples, replace `C:\\path\\to\\AspenPlus-MCP-Server` with the absolute path to your clone of this repository. `uv run` creates/updates the environment automatically on first start, so a prior `uv sync` is optional.
+In all examples, replace `C:\\path\\to\\AspenPlus-MCP-Server` with the absolute path to your clone of this repository. `uv run --locked` creates the environment from `uv.lock` on first start (a prior `uv sync` is optional) and refuses to start if the lock file is out of date.
 
 ### Claude Code
 
 ```powershell
-claude mcp add aspenplus --scope user -- uv --directory "C:\path\to\AspenPlus-MCP-Server" run aspenplus-mcp
+claude mcp add aspenplus --scope user -- uv --directory "C:\path\to\AspenPlus-MCP-Server" run --locked aspenplus-mcp
 ```
 
 - `--scope user` makes the server available in all projects; omit it (default `local`) to register it only for the current project, or use `--scope project` to write it to a shared `.mcp.json`.
@@ -139,6 +131,7 @@ Add to your Claude Desktop config file (Settings → Developer → Edit Config):
         "--directory",
         "C:\\path\\to\\AspenPlus-MCP-Server",
         "run",
+        "--locked",
         "aspenplus-mcp"
       ]
     }
@@ -151,21 +144,6 @@ Add to your Claude Desktop config file (Settings → Developer → Edit Config):
 - If Claude Desktop cannot find `uv`, use its full path as `command` (find it with `where uv`, e.g. `C:\\Users\\<you>\\.local\\bin\\uv.exe`)
 - After editing the config file, fully quit and restart Claude Desktop (also from the system tray)
 - The MCP server starts automatically when Claude Desktop launches
-
-<details>
-<summary>Alternative without uv (pip installation)</summary>
-
-```json
-{
-  "mcpServers": {
-    "aspenplus": {
-      "command": "C:\\path\\to\\AspenPlus-MCP-Server\\.venv\\Scripts\\python.exe",
-      "args": ["-m", "aspenplus_mcp.server"]
-    }
-  }
-}
-```
-</details>
 
 ## Usage Examples
 

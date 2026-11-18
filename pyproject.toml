@@ -16,21 +16,27 @@ dependencies = [
     "mcp>=2.3.0,<3",  # uses mcp.server.mcpserver.MCPServer (mcp 2.x API)
     "pydantic>=2.0",
     "pywin32>=306; platform_system=='Windows'",  # basic mode
-    # enhanced mode (flowsheet editing); BSD-3-Clause, pre-1.0 -> pinned to minor
-    "py2aspen>=0.3,<0.4; platform_system=='Windows'",
+    # enhanced mode (flowsheet editing); BSD-3-Clause, single maintainer, pre-1.0
+    # -> pinned exactly; update only deliberately (see CLAUDE.md "Dependency updates")
+    "py2aspen==0.3.0; platform_system=='Windows'",
 ]
 
 [project.scripts]
 aspenplus-mcp = "aspenplus_mcp.server:run"
 
-# Dev dependencies (installed automatically by `uv sync`;
-# with pip: `pip install --group dev` (pip >= 25.1))
+# Dev dependencies (installed automatically by `uv sync`)
 [dependency-groups]
 dev = [
     "pytest>=7.0.0",
     "black>=23.0.0",
     "mypy>=1.0.0",
 ]
+
+[tool.uv]
+# Supply-chain cooldown: only resolve package versions uploaded before this
+# date. When updating dependencies, move it to ~7 days before today
+# (see CLAUDE.md "Dependency updates").
+exclude-newer = "2026-11-11T00:00:00Z"
 
 [tool.setuptools.packages.find]
 where = ["src"]
