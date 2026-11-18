@@ -90,7 +90,10 @@ def register_tools(mcp: MCPServer, aspen: AspenPlusWrapper) -> None:
         equipment_type: Annotated[
             str,
             Field(
-                description="Type of equipment (Mixer, Heater, Flash2, Radfrac, DSTWU, RPLUG, RCSTR, RYIELD)"
+                description=(
+                    "Type of equipment (case-insensitive): Mixer, Heater, Flash2, Radfrac, "
+                    "DSTWU, RPlug, RCSTR, RYield, Splitter"
+                )
             ),
         ],
     ) -> str:
@@ -110,7 +113,7 @@ def register_tools(mcp: MCPServer, aspen: AspenPlusWrapper) -> None:
     async def place_stream(
         stream_name: Annotated[str, Field(description="Name for the new stream")],
         stream_type: Annotated[
-            str, Field(description="Type of stream: MATERIAL, HEAT, or WORK")
+            str, Field(description="Type of stream: MATERIAL, HEAT, WORK, or POWER")
         ] = "MATERIAL",
     ) -> str:
         """Place a new stream in the flowsheet (requires enhanced interface)"""
@@ -121,7 +124,15 @@ def register_tools(mcp: MCPServer, aspen: AspenPlusWrapper) -> None:
     async def connect_stream(
         block_name: Annotated[str, Field(description="Name of the block")],
         stream_name: Annotated[str, Field(description="Name of the stream")],
-        port_name: Annotated[str, Field(description="Name of the port on the block")],
+        port_name: Annotated[
+            str,
+            Field(
+                description=(
+                    "Aspen port name on the block, e.g. F(IN), P(OUT), V(OUT), L(OUT), "
+                    "D(OUT), B(OUT), LD(OUT)"
+                )
+            ),
+        ],
     ) -> str:
         """Connect a stream to a block port (requires enhanced interface)"""
         _call("connect_stream", aspen.connect_stream, block_name, stream_name, port_name)

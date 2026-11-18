@@ -1,44 +1,30 @@
 """Wrapper for Aspen Plus COM interface."""
 
 import logging
-from collections.abc import Iterator
-from contextlib import contextmanager, redirect_stdout
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 import sys
-import os
+
+if TYPE_CHECKING:
+    from .enhanced import EnhancedSession
 
 logger = logging.getLogger(__name__)
 
-
-@contextmanager
-def _isolated_vendored_call() -> Iterator[None]:
-    """Contain side effects of the vendored aspen_interface library.
-
-    The library is kept unmodified (see THIRD_PARTY_NOTICES.md), but it
-    - prints to stdout, which is the MCP JSON-RPC channel in stdio mode, and
-    - calls os.chdir(), changing the working directory of the whole server.
-    Within this context stdout goes to stderr and the working directory is
-    restored afterwards.
-    """
-    cwd = os.getcwd()
-    try:
-        with redirect_stdout(sys.stderr):
-            yield
-    finally:
-        if os.getcwd() != cwd:
-            os.chdir(cwd)
+ASPEN_PROGID = "Apwn.Document"
 
 
 class AspenPlusWrapper:
-    """Wrapper class for Aspen Plus COM automation with extended capabilities."""
+    """Wrapper class for Aspen Plus COM automation with extended capabilities.
+
+    - Basic mode: direct COM access via pywin32 (node paths only)
+    - Enhanced mode: flowsheet editing via py2aspen (see enhanced.py)
+    """
 
     def __init__(self):
         """Initialize the Aspen Plus wrapper."""
         self.aspen = None
-        self.simulation = None  # Enhanced interface from aspen_interface
+        self.session: Optional["EnhancedSession"] = None  # enhanced mode (py2aspen)
         self._is_windows = sys.platform == "win32"
         self._current_file = None
-        self._working_directory = None
 
         if self._is_windows:
             try:
@@ -64,7 +50,7 @@ class AspenPlusWrapper:
             raise RuntimeError("Cannot connect to Aspen Plus: pywin32 not available")
 
         try:
-            self.aspen = self.win32com.Dispatch("Apwn.Document")
+            self.aspen = self.win32com.Dispatch(ASPEN_PROGID)
             logger.info("Connected to Aspen Plus")
             return True
         except Exception as e:
@@ -82,25 +68,20 @@ class AspenPlusWrapper:
         Returns:
             bool: True if file opened successfully
         """
-        if use_enhanced and self._is_windows and self.win32com:
+        if use_enhanced and self._is_windows:
             try:
-                working_dir = os.path.dirname(os.path.abspath(filepath))
-                filename = os.path.basename(filepath)
-                with _isolated_vendored_call():
-                    # Importing creates the COM dispatch (class attribute), so it is isolated too
-                    from .aspen_interface import Simulation
+                # Imported lazily: py2aspen/comtypes are Windows-only
+                from .enhanced import EnhancedSession
 
-                    self.simulation = Simulation(
-                        AspenFileName=filename, WorkingDirectoryPath=working_dir, VISIBILITY=False
-                    )
-                # Share the library's COM document so node-path tools (get_value,
-                # set_value) also work in enhanced mode
-                self.aspen = self.simulation.AspenSimulation
+                self.session = EnhancedSession(ASPEN_PROGID, filepath)
+                # Share the session's COM document so node-path tools
+                # (get_value, set_value) also work in enhanced mode
+                self.aspen = self.session.app
                 self._current_file = filepath
-                self._working_directory = working_dir
                 logger.info(f"Opened file with enhanced interface: {filepath}")
                 return True
             except Exception as e:
+                self.session = None
                 logger.warning(f"Failed to use enhanced interface, falling back to basic: {e}")
                 use_enhanced = False
 
@@ -119,16 +100,15 @@ class AspenPlusWrapper:
 
     def close(self):
         """Close the Aspen Plus connection."""
-        if self.simulation:
+        if self.session:
             try:
-                with _isolated_vendored_call():
-                    self.simulation.CloseAspen()
+                self.session.close()
                 logger.info("Closed Aspen Plus connection (enhanced interface)")
             except Exception as e:
                 logger.error(f"Error closing Aspen Plus: {e}")
             finally:
-                self.simulation = None
-                # self.aspen is the library's document in enhanced mode - already closed
+                self.session = None
+                # self.aspen is the session's document in enhanced mode - already closed
                 self.aspen = None
 
         if self.aspen:
@@ -141,7 +121,6 @@ class AspenPlusWrapper:
                 self.aspen = None
 
         self._current_file = None
-        self._working_directory = None
 
     def run_simulation(self) -> bool:
         """
@@ -150,10 +129,9 @@ class AspenPlusWrapper:
         Returns:
             bool: True if simulation ran successfully
         """
-        if self.simulation:
+        if self.session:
             try:
-                with _isolated_vendored_call():
-                    self.simulation.EngineRun()
+                self.session.run()
                 logger.info("Simulation completed (enhanced interface)")
                 return True
             except Exception as e:
@@ -215,15 +193,11 @@ class AspenPlusWrapper:
             logger.error(f"Failed to set value at {path}: {e}")
             raise
 
-    # Enhanced methods using aspen_interface library
-    def get_enhanced_interface(self):
-        """
-        Get the enhanced Simulation interface.
-
-        Returns:
-            Simulation object if available, None otherwise
-        """
-        return self.simulation
+    # Enhanced methods (py2aspen)
+    def _require_session(self) -> "EnhancedSession":
+        if not self.session:
+            raise RuntimeError("Enhanced interface not available. Open file with use_enhanced=True")
+        return self.session
 
     def place_block(self, block_name: str, equipment_type: str) -> bool:
         """
@@ -236,12 +210,9 @@ class AspenPlusWrapper:
         Returns:
             bool: True if block placed successfully
         """
-        if not self.simulation:
-            raise RuntimeError("Enhanced interface not available. Open file with use_enhanced=True")
-
+        session = self._require_session()
         try:
-            with _isolated_vendored_call():
-                self.simulation.BlockPlace(block_name, equipment_type)
+            session.place_block(block_name, equipment_type)
             logger.info(f"Placed block {block_name} of type {equipment_type}")
             return True
         except Exception as e:
@@ -258,12 +229,9 @@ class AspenPlusWrapper:
         Returns:
             bool: True if block deleted successfully
         """
-        if not self.simulation:
-            raise RuntimeError("Enhanced interface not available. Open file with use_enhanced=True")
-
+        session = self._require_session()
         try:
-            with _isolated_vendored_call():
-                self.simulation.BlockDelete(block_name)
+            session.delete_block(block_name)
             logger.info(f"Deleted block {block_name}")
             return True
         except Exception as e:
@@ -276,17 +244,14 @@ class AspenPlusWrapper:
 
         Args:
             stream_name: Name for the stream
-            stream_type: Type of stream (e.g., "MATERIAL", "HEAT", "WORK")
+            stream_type: Type of stream ("MATERIAL", "HEAT", "WORK", "POWER")
 
         Returns:
             bool: True if stream placed successfully
         """
-        if not self.simulation:
-            raise RuntimeError("Enhanced interface not available. Open file with use_enhanced=True")
-
+        session = self._require_session()
         try:
-            with _isolated_vendored_call():
-                self.simulation.StreamPlace(stream_name, stream_type)
+            session.place_stream(stream_name, stream_type)
             logger.info(f"Placed stream {stream_name} of type {stream_type}")
             return True
         except Exception as e:
@@ -300,17 +265,14 @@ class AspenPlusWrapper:
         Args:
             block_name: Name of the block
             stream_name: Name of the stream
-            port_name: Name of the port on the block
+            port_name: Aspen port name on the block (e.g. "F(IN)", "P(OUT)")
 
         Returns:
             bool: True if connection successful
         """
-        if not self.simulation:
-            raise RuntimeError("Enhanced interface not available. Open file with use_enhanced=True")
-
+        session = self._require_session()
         try:
-            with _isolated_vendored_call():
-                self.simulation.StreamConnect(block_name, stream_name, port_name)
+            session.connect_stream(block_name, stream_name, port_name)
             logger.info(f"Connected stream {stream_name} to {block_name}.{port_name}")
             return True
         except Exception as e:
@@ -322,23 +284,16 @@ class AspenPlusWrapper:
         Save the simulation (enhanced interface only).
 
         Args:
-            filename: Optional new filename. If None, saves to current file.
+            filename: Optional new filename (.bkp = backup archive, otherwise
+                Aspen document). If None, saves to current file.
 
         Returns:
             bool: True if save successful
         """
-        if not self.simulation:
-            raise RuntimeError("Enhanced interface not available. Open file with use_enhanced=True")
-
+        session = self._require_session()
         try:
-            if filename:
-                with _isolated_vendored_call():
-                    self.simulation.SaveAs(filename)
-                logger.info(f"Saved simulation as {filename}")
-            else:
-                with _isolated_vendored_call():
-                    self.simulation.Save()
-                logger.info("Saved simulation")
+            session.save(filename)
+            logger.info(f"Saved simulation as {filename}" if filename else "Saved simulation")
             return True
         except Exception as e:
             logger.error(f"Failed to save simulation: {e}")
