@@ -64,6 +64,14 @@ Uses the high-level `MCPServer` API of the MCP Python SDK 2.x (`mcp.server.mcpse
 - Errors: raise `ToolError` (from `mcp.server.mcpserver.exceptions`) so the message reaches the model with `isError: true`; other exceptions only yield a generic error
 - **Tools must stay `async def`**: MCPServer runs sync tools in worker threads, but Aspen Plus COM objects are apartment-threaded and must be used from the thread that created them
 
+### Testing
+
+- `tests/test_tools.py` tests the MCP layer (tools + resources) in-process via `mcp.Client(create_server(fake))` – no Windows/Aspen Plus needed
+- `tests/conftest.py` provides `FakeAspen`, a stand-in for `AspenPlusWrapper` that records calls, thread ids, and can return values or raise errors
+- Async tests use the anyio pytest plugin (`pytestmark = pytest.mark.anyio`), not pytest-asyncio: the MCP client's anyio task groups break with pytest-asyncio async fixtures
+- `test_wrapper_calls_stay_on_event_loop_thread` guards the COM thread-affinity requirement (fails if a tool becomes a sync `def`)
+- New tools: add them to `EXPECTED_TOOLS`, the forwarding parametrization, the thread test, and `FakeAspen`
+
 ### Platform Limitations
 
 The Aspen Plus wrapper only works on Windows with pywin32 installed. The code includes checks for platform compatibility and gracefully degrades on non-Windows systems.

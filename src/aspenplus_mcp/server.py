@@ -18,12 +18,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def create_server() -> MCPServer:
-    """Create the Aspen Plus MCP server with all tools and resources registered."""
+def create_server(aspen: AspenPlusWrapper | None = None) -> MCPServer:
+    """Create the Aspen Plus MCP server with all tools and resources registered.
+
+    Args:
+        aspen: Wrapper instance to use; a new AspenPlusWrapper is created if omitted
+            (tests pass a fake here).
+    """
     mcp = MCPServer("aspenplus-mcp")
 
-    # Initialize Aspen Plus wrapper
-    aspen = AspenPlusWrapper()
+    if aspen is None:
+        aspen = AspenPlusWrapper()
 
     # Register tools and resources
     register_tools(mcp, aspen)

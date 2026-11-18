@@ -30,7 +30,6 @@ aspenplus-mcp = "aspenplus_mcp.server:run"
 [dependency-groups]
 dev = [
     "pytest>=7.0.0",
-    "pytest-asyncio>=0.21.0",
     "black>=23.0.0",
     "mypy>=1.0.0",
 ]
@@ -48,3 +47,6 @@ extend-exclude = "aspen_interface\\.py"
 python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
