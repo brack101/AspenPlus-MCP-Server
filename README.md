@@ -7,15 +7,16 @@ MCP (Model Context Protocol) server for Aspen Plus process simulation integratio
 - **Process Simulation Control**: Open, run, and manage Aspen Plus simulations
 - **Data Access**: Read and write stream properties, block parameters, and simulation results
 - **Flowsheet Manipulation**: Create, delete, and connect equipment blocks and streams (enhanced mode)
-- **Equipment Support**: Mixer, Heater, Flash2, Radfrac, DSTWU, RPLUG, RCSTR, RYIELD
+- **Equipment Support**: Mixer, Heater, Flash2, Radfrac, DSTWU, RPlug, RCSTR, RYield, Splitter
+- **Stream Types**: MATERIAL, HEAT, WORK, POWER
 - **AI Integration**: Connect Claude and other AI assistants to Aspen Plus
 
 ## Requirements
 
-- Python 3.10 or higher
+- Python 3.11 or higher
 - Windows OS (for Aspen Plus COM interface)
 - Aspen Plus installed
-- [uv](https://docs.astral.sh/uv/) (recommended) – installs Python and all dependencies (incl. pywin32) automatically
+- [uv](https://docs.astral.sh/uv/) (recommended) – installs Python and all dependencies (incl. pywin32 and py2aspen) automatically
 
 ## Installation
 
@@ -67,11 +68,13 @@ The server communicates via stdio and is normally started by the MCP client (see
 - `close_simulation` - Close the current simulation
 
 #### Enhanced Mode Tools (requires `use_enhanced: true`)
+Enhanced mode uses [py2aspen](https://github.com/adk23333/py2aspen) for flowsheet editing. `get_value`/`set_value` work in both modes.
+
 - `place_block` - Add a new equipment block to the flowsheet
 - `delete_block` - Remove an equipment block from the flowsheet
 - `place_stream` - Add a new stream to the flowsheet
-- `connect_stream` - Connect a stream to a block port
-- `save_simulation` - Save the simulation to file
+- `connect_stream` - Connect a stream to a block port (Aspen port names such as `F(IN)`, `P(OUT)`, `V(OUT)`, `L(OUT)`, `D(OUT)`, `B(OUT)`)
+- `save_simulation` - Save the simulation (`*.bkp` → backup archive, otherwise Aspen document)
 
 ### Example Node Paths
 
@@ -193,9 +196,11 @@ place_block(block_name="MIX-01", equipment_type="Mixer")
 place_stream(stream_name="STREAM-1", stream_type="MATERIAL")
 place_stream(stream_name="STREAM-2", stream_type="MATERIAL")
 
-# Connect streams to mixer
-connect_stream(block_name="MIX-01", stream_name="STREAM-1", port_name="IN1")
-connect_stream(block_name="MIX-01", stream_name="STREAM-2", port_name="IN2")
+# Connect both feeds and the product stream to the mixer
+connect_stream(block_name="MIX-01", stream_name="STREAM-1", port_name="F(IN)")
+connect_stream(block_name="MIX-01", stream_name="STREAM-2", port_name="F(IN)")
+place_stream(stream_name="PRODUCT", stream_type="MATERIAL")
+connect_stream(block_name="MIX-01", stream_name="PRODUCT", port_name="P(OUT)")
 
 # Save changes
 save_simulation()
@@ -203,10 +208,9 @@ save_simulation()
 
 ## Credits
 
-This project includes the [AspenPlus Python Interface](https://github.com/YouMayCallMeJesus/AspenPlus-Python-Interface) by Richard Wolfgang ten Hagen (version 2.1) as `src/aspenplus_mcp/aspen_interface.py` for advanced flowsheet manipulation capabilities. If you use it for academic research, please cite it (see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)).
+- Flowsheet editing (enhanced mode) is built on [py2aspen](https://github.com/adk23333/py2aspen) by SanLiy (BSD-3-Clause).
+- Earlier versions of this project used the [AspenPlus Python Interface](https://github.com/YouMayCallMeJesus/AspenPlus-Python-Interface) by Richard Wolfgang ten Hagen, which also served as a reference for py2aspen.
 
 ## License
 
-The code of this project is licensed under the MIT license.
-
-**Exception:** `src/aspenplus_mcp/aspen_interface.py` is third-party code that is **not** covered by the MIT license. Its upstream repository has no license file; its terms of use are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+MIT. Dependencies (e.g. py2aspen: BSD-3-Clause, pywin32, comtypes) are installed from PyPI and remain under their own licenses; none of them is bundled in this repository.

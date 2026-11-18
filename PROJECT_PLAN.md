@@ -30,8 +30,8 @@ Build an MCP (Model Context Protocol) server to enable AI assistants to interact
 - **MCP SDK**: Python MCP SDK from Anthropic
 - **Aspen Interface**:
   - `win32com.client` (pywin32) for basic COM access
-  - [AspenPlus-Python-Interface](https://github.com/YouMayCallMeJesus/AspenPlus-Python-Interface) (vendored) for enhanced flowsheet manipulation
-- **Dependencies**: mcp, pywin32, numpy
+  - [py2aspen](https://github.com/adk23333/py2aspen) (BSD-3-Clause, comtypes) for enhanced flowsheet manipulation
+- **Dependencies**: mcp, pydantic, pywin32, py2aspen
 - **Transport**: stdio and HTTP with SSE support
 
 ### Project Structure
@@ -42,8 +42,8 @@ AspenPlusMCP/
 │   │   ├── __init__.py
 │   │   ├── server.py          # Main MCP server
 │   │   ├── aspen_wrapper.py   # COM interface wrapper (dual-mode)
-│   │   ├── aspen_interface.py # Enhanced library (vendored from AspenPlus-Python-Interface)
-│   │   ├── tools.py           # MCP tool implementations (11 tools)
+│   │   ├── enhanced.py        # Enhanced mode via py2aspen
+│   │   ├── tools.py           # MCP tool implementations (10 tools)
 │   │   ├── resources.py       # MCP resource implementations
 │   │   └── prompts.py         # MCP prompt templates
 ├── tests/
@@ -62,10 +62,10 @@ AspenPlusMCP/
   - `get_value` - Retrieve values using node paths
   - `set_value` - Modify parameters using node paths
   - `close_simulation` - Close simulation
-- Enhanced Mode (requires AspenPlus-Python-Interface):
+- Enhanced Mode (via py2aspen):
   - `place_block` - Add equipment to flowsheet
   - `delete_block` - Remove equipment from flowsheet
-  - `place_stream` - Create material/heat/work streams
+  - `place_stream` - Create material/heat/work/power streams
   - `connect_stream` - Wire blocks together
   - `save_simulation` - Save changes to file
 
@@ -98,6 +98,7 @@ AspenPlusMCP/
   - ✅ Implemented dual-mode wrapper (basic/enhanced)
   - ✅ Added flowsheet manipulation tools (11 total tools)
   - ✅ Created comprehensive documentation
+  - ✅ Replaced vendored AspenPlus-Python-Interface with py2aspen (BSD-3-Clause, PyPI)
 
 ### 🚧 In Progress / Future
 - **Phase 4: Advanced Features**
@@ -108,7 +109,7 @@ AspenPlusMCP/
 - **Phase 5: Production Ready**
   - ⏳ Add HTTP/SSE transport support
   - ⏳ Implement comprehensive error handling
-  - ⏳ Set up testing suite
+  - ✅ Set up testing suite (MCP layer + enhanced mode with fakes; no Windows integration tests yet)
   - ✅ Create documentation and examples
 
 ## References
@@ -119,6 +120,7 @@ AspenPlusMCP/
 - [MCP Server Examples](https://github.com/modelcontextprotocol/servers)
 
 ### Aspen Plus Automation
-- [Aspen Plus Python Interface](https://github.com/YouMayCallMeJesus/AspenPlus-Python-Interface)
+- [py2aspen](https://github.com/adk23333/py2aspen)
+- [Aspen Plus Python Interface](https://github.com/YouMayCallMeJesus/AspenPlus-Python-Interface) (used in earlier versions)
 - [Aspen Plus Automation](https://github.com/zwang1995/Aspen-Plus-Automation)
 - [ap-python package](https://github.com/bsha0/ap-python)

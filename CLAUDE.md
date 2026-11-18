@@ -37,14 +37,14 @@ uv run black src/
 - **server.py**: Main MCP server using stdio transport
 - **aspen_wrapper.py**: COM interface wrapper for Aspen Plus with dual-mode support (Windows-only)
   - Basic mode: Direct COM access for reading/writing values
-  - Enhanced mode: Advanced interface with flowsheet manipulation capabilities
-- **aspen_interface.py**: Extended Aspen Plus automation library (vendored from AspenPlus-Python-Interface)
+  - Enhanced mode: delegates to `enhanced.py`; shares the session's COM document as `self.aspen`, so node-path tools work in both modes
+- **enhanced.py**: Enhanced mode via [py2aspen](https://github.com/adk23333/py2aspen) (`EnhancedSession`); imported lazily, Windows only
 - **tools.py**: MCP tool implementations with 10 tools including flowsheet editing
 - **resources.py**: MCP resource endpoints (simulation status)
 
 ### Aspen Plus Integration
 
-The project uses `win32com.client` (pywin32) to communicate with Aspen Plus via COM automation. Key concepts:
+Basic mode uses `win32com.client` (pywin32), enhanced mode uses py2aspen (comtypes). Key concepts:
 
 - **Node Paths**: Aspen Plus uses tree-based paths to access data (e.g., `\\Data\\Streams\\S1\\Output\\TEMP_OUT\\MIXED\\MIXED`)
 - **COM Dispatch**: Connection established via `win32com.client.Dispatch("Apwn.Document")`
@@ -52,11 +52,12 @@ The project uses `win32com.client` (pywin32) to communicate with Aspen Plus via 
 - **Dual Interface**:
   - Basic mode: Simple get/set operations on existing simulations
   - Enhanced mode: Full flowsheet manipulation (add/delete blocks, streams, connections)
-- **Vendored Library**: `aspen_interface.py` is vendored from [AspenPlus-Python-Interface](https://github.com/YouMayCallMeJesus/AspenPlus-Python-Interface) (by Richard ten Hagen), providing ~5000 lines of advanced functionality
-  - Requires `numpy` dependency
-  - Not available as pip package, so included directly in codebase
-  - **Do not modify it** (byte-identical to upstream, excluded from black). Contain its side effects (stdout prints, `os.chdir`) in `aspen_wrapper.py` via `_isolated_vendored_call()`; every `self.simulation.*` call must go through it
-  - Not MIT-licensed; origin, upstream commit and terms of use are in `THIRD_PARTY_NOTICES.md`
+- **py2aspen** (BSD-3-Clause, PyPI, pinned `>=0.3,<0.4` because pre-1.0; Windows-only dependency):
+  - `UnitAspen` with late binding (`lazybind()`), no generated type library needed
+  - Flowsheet operations are recorded as actions (`place`, `delete`, `connect`) and run via `unit.exec(...)`
+  - `connect` expects a bound port method (e.g. `mixer.f_in`); `enhanced.py` builds one for arbitrary port strings
+  - **Its loguru logger writes to stdout by default** – `enhanced.py` re-routes it to stderr on import; never call `py2aspen.log.set_level()` (re-adds stdout)
+  - Do not copy `tlb/v14/happ.tlb` from the py2aspen repo – it is AspenTech's proprietary type library
 
 ### MCP Implementation
 
@@ -72,7 +73,7 @@ Uses the high-level `MCPServer` API of the MCP Python SDK 2.x (`mcp.server.mcpse
 - `tests/conftest.py` provides `FakeAspen`, a stand-in for `AspenPlusWrapper` that records calls, thread ids, and can return values or raise errors
 - Async tests use the anyio pytest plugin (`pytestmark = pytest.mark.anyio`), not pytest-asyncio: the MCP client's anyio task groups break with pytest-asyncio async fixtures
 - `test_wrapper_calls_stay_on_event_loop_thread` guards the COM thread-affinity requirement (fails if a tool becomes a sync `def`)
-- `tests/test_aspen_wrapper.py` tests the wrapper's integration of the vendored library with a fake `aspen_interface` module that reproduces its side effects (stdout prints, `os.chdir`)
+- `tests/test_aspen_wrapper.py` tests enhanced mode against a fake `py2aspen` module (`build_fake_py2aspen()`), whose logger writes to stdout like loguru does
 - New tools: add them to `EXPECTED_TOOLS`, the forwarding parametrization, the thread test, and `FakeAspen`
 
 ### Platform Limitations
