@@ -5,6 +5,7 @@ module level, so this module must only be imported lazily, on Windows, when a
 file is opened with ``use_enhanced=True``.
 """
 
+import logging
 import sys
 import types
 from pathlib import Path
@@ -12,6 +13,8 @@ from typing import Any
 
 import py2aspen
 from py2aspen import Block, Stream, UnitAspen
+
+logger = logging.getLogger(__name__)
 
 # py2aspen logs via loguru to sys.stdout (configured at import). In stdio mode
 # stdout is the MCP JSON-RPC channel, so route its log output to stderr.
@@ -86,14 +89,23 @@ class EnhancedSession:
     """An open Aspen Plus simulation driven through py2aspen."""
 
     def __init__(self, progid: str, filepath: str) -> None:
+        # UnitAspen starts a new Aspen Plus instance; if any later step fails,
+        # close it again so no orphaned Aspen process is left behind.
         self.unit = UnitAspen(progid)
-        self.unit.lazybind()  # late binding, no generated type library needed
-        self.unit.suppress_dialogs(True)
-        if Path(filepath).suffix.lower() == ".apw":
-            self.unit.open_apw(filepath)
-        else:
-            self.unit.open_bkp(filepath)
-        self.unit.set_visible(False)
+        try:
+            self.unit.lazybind()  # late binding, no generated type library needed
+            self.unit.suppress_dialogs(True)
+            if Path(filepath).suffix.lower() == ".apw":
+                self.unit.open_apw(filepath)
+            else:
+                self.unit.open_bkp(filepath)
+            self.unit.set_visible(False)
+        except Exception:
+            try:
+                self.unit.exit()
+            except Exception as close_error:
+                logger.warning(f"Could not close Aspen Plus after failed open: {close_error}")
+            raise
 
     @property
     def app(self) -> Any:

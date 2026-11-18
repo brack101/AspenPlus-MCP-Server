@@ -92,7 +92,11 @@ def build_fake_py2aspen() -> types.ModuleType:
     mod.connect = connect
 
     class UnitAspen:
+        instances: list["UnitAspen"] = []
+        fail_on: set[str] = set()  # method names that raise (simulate COM errors)
+
         def __init__(self, progid: str, machine: str | None = None) -> None:
+            UnitAspen.instances.append(self)
             self.progid = progid
             self.app = FakeApp()
             self.calls: list[tuple[str, tuple[Any, ...]]] = []
@@ -116,6 +120,8 @@ def build_fake_py2aspen() -> types.ModuleType:
                 def record(*args: Any, **kwargs: Any) -> None:
                     self.calls.append((name, args + tuple(kwargs.items())))
                     logger.info("{} called", name)
+                    if name in UnitAspen.fail_on:
+                        raise RuntimeError(f"{name} failed")
 
                 return record
             raise AttributeError(name)
@@ -334,3 +340,96 @@ def test_enhanced_tools_require_enhanced_mode():
     ):
         with pytest.raises(RuntimeError, match="Enhanced interface not available"):
             call()
+
+
+# --- no orphaned Aspen instances ---------------------------------------------------
+
+
+class FakeBasicDocument:
+    """Stand-in for the pywin32 Apwn.Document used in basic mode."""
+
+    def __init__(self) -> None:
+        self.opened: list[str] = []
+        self.closed = False
+
+    def InitFromArchive2(self, path: str) -> None:
+        self.opened.append(path)
+
+    def Close(self) -> None:
+        self.closed = True
+
+
+def fake_win32com(documents: list[FakeBasicDocument]) -> types.SimpleNamespace:
+    def dispatch(progid: str) -> FakeBasicDocument:
+        documents.append(FakeBasicDocument())
+        return documents[-1]
+
+    return types.SimpleNamespace(Dispatch=dispatch)
+
+
+def test_reopening_in_enhanced_mode_closes_previous_instance(opened, fake_py2aspen):
+    first = unit_of(opened)
+
+    opened.open_file("C:/sims/other.bkp", use_enhanced=True)
+
+    assert first.calls[-1] == ("exit", ())
+    assert unit_of(opened) is not first
+    assert ("exit", ()) not in unit_of(opened).calls
+    assert len(fake_py2aspen.UnitAspen.instances) == 2
+
+
+def test_opening_basic_after_enhanced_closes_enhanced_instance(opened):
+    enhanced_unit = unit_of(opened)
+    documents: list[FakeBasicDocument] = []
+    opened.win32com = fake_win32com(documents)
+
+    opened.open_file("C:/sims/other.bkp", use_enhanced=False)
+
+    assert enhanced_unit.calls[-1] == ("exit", ())
+    assert opened.session is None
+    assert opened.aspen is documents[0]
+    assert documents[0].opened == ["C:/sims/other.bkp"]
+
+
+def test_opening_enhanced_after_basic_closes_basic_document(wrapper):
+    documents: list[FakeBasicDocument] = []
+    wrapper.win32com = fake_win32com(documents)
+    wrapper.open_file("C:/sims/basic.bkp", use_enhanced=False)
+
+    wrapper.open_file("C:/sims/enhanced.bkp", use_enhanced=True)
+
+    assert documents[0].closed
+    assert wrapper.aspen is unit_of(wrapper).app
+
+
+def test_basic_reopen_keeps_reusing_document(wrapper):
+    documents: list[FakeBasicDocument] = []
+    wrapper.win32com = fake_win32com(documents)
+
+    wrapper.open_file("C:/sims/a.bkp")
+    wrapper.open_file("C:/sims/b.bkp")
+
+    assert len(documents) == 1
+    assert documents[0].opened == ["C:/sims/a.bkp", "C:/sims/b.bkp"]
+    assert not documents[0].closed
+
+
+@pytest.mark.parametrize("failing_step", ["lazybind", "open_bkp", "set_visible"])
+def test_failed_enhanced_open_closes_started_instance(wrapper, fake_py2aspen, failing_step):
+    fake_py2aspen.UnitAspen.fail_on = {failing_step}
+    wrapper.win32com = None  # no basic fallback available
+
+    with pytest.raises(RuntimeError, match="pywin32 not available"):
+        wrapper.open_file("C:/sims/missing.bkp", use_enhanced=True)
+
+    [unit] = fake_py2aspen.UnitAspen.instances
+    assert unit.calls[-1] == ("exit", ())
+    assert wrapper.session is None
+
+
+def test_failed_open_reraises_original_error_if_close_also_fails(fake_py2aspen):
+    fake_py2aspen.UnitAspen.fail_on = {"open_bkp", "exit"}
+    from aspenplus_mcp.enhanced import EnhancedSession
+
+    with pytest.raises(RuntimeError, match="open_bkp failed"):
+        EnhancedSession("Apwn.Document", "C:/sims/missing.bkp")

@@ -68,6 +68,13 @@ class AspenPlusWrapper:
         Returns:
             bool: True if file opened successfully
         """
+        # Each enhanced session is its own Aspen Plus instance, and enhanced
+        # mode never reuses a basic-mode document: close the previous
+        # connection first so no Aspen instance is left running. (Basic ->
+        # basic keeps reusing its document, as before.)
+        if self.session or (use_enhanced and self.aspen):
+            self.close()
+
         if use_enhanced and self._is_windows:
             try:
                 # Imported lazily: py2aspen/comtypes are Windows-only
