@@ -22,6 +22,7 @@ class AspenPlusWrapper:
         if self._is_windows:
             try:
                 import win32com.client
+
                 self.win32com = win32com.client
                 logger.info("Windows COM interface available")
             except ImportError:
@@ -63,12 +64,11 @@ class AspenPlusWrapper:
         if use_enhanced and self._is_windows and self.win32com:
             try:
                 from .aspen_interface import Simulation
+
                 working_dir = os.path.dirname(os.path.abspath(filepath))
                 filename = os.path.basename(filepath)
                 self.simulation = Simulation(
-                    AspenFileName=filename,
-                    WorkingDirectoryPath=working_dir,
-                    VISIBILITY=False
+                    AspenFileName=filename, WorkingDirectoryPath=working_dir, VISIBILITY=False
                 )
                 self._current_file = filepath
                 self._working_directory = working_dir

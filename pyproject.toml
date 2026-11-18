@@ -41,6 +41,8 @@ where = ["src"]
 [tool.black]
 line-length = 100
 target-version = ["py310"]
+# aspen_interface.py is vendored – keep it close to upstream for diffs/updates
+extend-exclude = "aspen_interface\\.py"
 
 [tool.mypy]
 python_version = "3.10"

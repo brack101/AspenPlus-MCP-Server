@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
+
 def _call(tool: str, fn: Callable[..., T], *args: Any) -> T:
     """Run a wrapper call and turn failures into ToolError.
 
@@ -59,7 +60,9 @@ def register_tools(mcp: MCPServer, aspen: AspenPlusWrapper) -> None:
     async def get_value(
         path: Annotated[
             str,
-            Field(description="Node path (e.g., \\Data\\Streams\\S1\\Output\\TEMP_OUT\\MIXED\\MIXED)"),
+            Field(
+                description="Node path (e.g., \\Data\\Streams\\S1\\Output\\TEMP_OUT\\MIXED\\MIXED)"
+            ),
         ],
     ) -> str:
         """Get a value from the simulation using a node path"""
@@ -86,7 +89,9 @@ def register_tools(mcp: MCPServer, aspen: AspenPlusWrapper) -> None:
         block_name: Annotated[str, Field(description="Name for the new block")],
         equipment_type: Annotated[
             str,
-            Field(description="Type of equipment (Mixer, Heater, Flash2, Radfrac, DSTWU, RPLUG, RCSTR, RYIELD)"),
+            Field(
+                description="Type of equipment (Mixer, Heater, Flash2, Radfrac, DSTWU, RPLUG, RCSTR, RYIELD)"
+            ),
         ],
     ) -> str:
         """Place a new equipment block in the flowsheet (requires enhanced interface)"""
@@ -104,7 +109,9 @@ def register_tools(mcp: MCPServer, aspen: AspenPlusWrapper) -> None:
     @mcp.tool()
     async def place_stream(
         stream_name: Annotated[str, Field(description="Name for the new stream")],
-        stream_type: Annotated[str, Field(description="Type of stream: MATERIAL, HEAT, or WORK")] = "MATERIAL",
+        stream_type: Annotated[
+            str, Field(description="Type of stream: MATERIAL, HEAT, or WORK")
+        ] = "MATERIAL",
     ) -> str:
         """Place a new stream in the flowsheet (requires enhanced interface)"""
         _call("place_stream", aspen.place_stream, stream_name, stream_type)
@@ -122,7 +129,9 @@ def register_tools(mcp: MCPServer, aspen: AspenPlusWrapper) -> None:
 
     @mcp.tool()
     async def save_simulation(
-        filename: Annotated[str | None, Field(description="Optional: new filename to save as")] = None,
+        filename: Annotated[
+            str | None, Field(description="Optional: new filename to save as")
+        ] = None,
     ) -> str:
         """Save the simulation to file (requires enhanced interface)"""
         _call("save_simulation", aspen.save_simulation, filename)
