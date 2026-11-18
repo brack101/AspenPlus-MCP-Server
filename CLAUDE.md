@@ -55,6 +55,8 @@ The project uses `win32com.client` (pywin32) to communicate with Aspen Plus via 
 - **Vendored Library**: `aspen_interface.py` is vendored from [AspenPlus-Python-Interface](https://github.com/YouMayCallMeJesus/AspenPlus-Python-Interface) (by Richard ten Hagen), providing ~5000 lines of advanced functionality
   - Requires `numpy` dependency
   - Not available as pip package, so included directly in codebase
+  - **Do not modify it** (byte-identical to upstream, excluded from black). Contain its side effects (stdout prints, `os.chdir`) in `aspen_wrapper.py` via `_isolated_vendored_call()`; every `self.simulation.*` call must go through it
+  - Not MIT-licensed; origin, upstream commit and terms of use are in `THIRD_PARTY_NOTICES.md`
 
 ### MCP Implementation
 
@@ -70,6 +72,7 @@ Uses the high-level `MCPServer` API of the MCP Python SDK 2.x (`mcp.server.mcpse
 - `tests/conftest.py` provides `FakeAspen`, a stand-in for `AspenPlusWrapper` that records calls, thread ids, and can return values or raise errors
 - Async tests use the anyio pytest plugin (`pytestmark = pytest.mark.anyio`), not pytest-asyncio: the MCP client's anyio task groups break with pytest-asyncio async fixtures
 - `test_wrapper_calls_stay_on_event_loop_thread` guards the COM thread-affinity requirement (fails if a tool becomes a sync `def`)
+- `tests/test_aspen_wrapper.py` tests the wrapper's integration of the vendored library with a fake `aspen_interface` module that reproduces its side effects (stdout prints, `os.chdir`)
 - New tools: add them to `EXPECTED_TOOLS`, the forwarding parametrization, the thread test, and `FakeAspen`
 
 ### Platform Limitations

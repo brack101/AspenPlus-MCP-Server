@@ -203,8 +203,10 @@ save_simulation()
 
 ## Credits
 
-This project integrates the [AspenPlus-Python-Interface](https://github.com/YouMayCallMeJesus/AspenPlus-Python-Interface) by Richard ten Hagen for advanced flowsheet manipulation capabilities.
+This project includes the [AspenPlus Python Interface](https://github.com/YouMayCallMeJesus/AspenPlus-Python-Interface) by Richard Wolfgang ten Hagen (version 2.1) as `src/aspenplus_mcp/aspen_interface.py` for advanced flowsheet manipulation capabilities. If you use it for academic research, please cite it (see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)).
 
 ## License
 
-MIT
+The code of this project is licensed under the MIT license.
+
+**Exception:** `src/aspenplus_mcp/aspen_interface.py` is third-party code that is **not** covered by the MIT license. Its upstream repository has no license file; its terms of use are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -1,11 +1,32 @@
 """Wrapper for Aspen Plus COM interface."""
 
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager, redirect_stdout
 from typing import Any, Optional
 import sys
 import os
 
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def _isolated_vendored_call() -> Iterator[None]:
+    """Contain side effects of the vendored aspen_interface library.
+
+    The library is kept unmodified (see THIRD_PARTY_NOTICES.md), but it
+    - prints to stdout, which is the MCP JSON-RPC channel in stdio mode, and
+    - calls os.chdir(), changing the working directory of the whole server.
+    Within this context stdout goes to stderr and the working directory is
+    restored afterwards.
+    """
+    cwd = os.getcwd()
+    try:
+        with redirect_stdout(sys.stderr):
+            yield
+    finally:
+        if os.getcwd() != cwd:
+            os.chdir(cwd)
 
 
 class AspenPlusWrapper:
@@ -63,13 +84,18 @@ class AspenPlusWrapper:
         """
         if use_enhanced and self._is_windows and self.win32com:
             try:
-                from .aspen_interface import Simulation
-
                 working_dir = os.path.dirname(os.path.abspath(filepath))
                 filename = os.path.basename(filepath)
-                self.simulation = Simulation(
-                    AspenFileName=filename, WorkingDirectoryPath=working_dir, VISIBILITY=False
-                )
+                with _isolated_vendored_call():
+                    # Importing creates the COM dispatch (class attribute), so it is isolated too
+                    from .aspen_interface import Simulation
+
+                    self.simulation = Simulation(
+                        AspenFileName=filename, WorkingDirectoryPath=working_dir, VISIBILITY=False
+                    )
+                # Share the library's COM document so node-path tools (get_value,
+                # set_value) also work in enhanced mode
+                self.aspen = self.simulation.AspenSimulation
                 self._current_file = filepath
                 self._working_directory = working_dir
                 logger.info(f"Opened file with enhanced interface: {filepath}")
@@ -95,12 +121,15 @@ class AspenPlusWrapper:
         """Close the Aspen Plus connection."""
         if self.simulation:
             try:
-                self.simulation.CloseAspen()
+                with _isolated_vendored_call():
+                    self.simulation.CloseAspen()
                 logger.info("Closed Aspen Plus connection (enhanced interface)")
             except Exception as e:
                 logger.error(f"Error closing Aspen Plus: {e}")
             finally:
                 self.simulation = None
+                # self.aspen is the library's document in enhanced mode - already closed
+                self.aspen = None
 
         if self.aspen:
             try:
@@ -123,7 +152,8 @@ class AspenPlusWrapper:
         """
         if self.simulation:
             try:
-                self.simulation.EngineRun()
+                with _isolated_vendored_call():
+                    self.simulation.EngineRun()
                 logger.info("Simulation completed (enhanced interface)")
                 return True
             except Exception as e:
@@ -210,7 +240,8 @@ class AspenPlusWrapper:
             raise RuntimeError("Enhanced interface not available. Open file with use_enhanced=True")
 
         try:
-            self.simulation.BlockPlace(block_name, equipment_type)
+            with _isolated_vendored_call():
+                self.simulation.BlockPlace(block_name, equipment_type)
             logger.info(f"Placed block {block_name} of type {equipment_type}")
             return True
         except Exception as e:
@@ -231,7 +262,8 @@ class AspenPlusWrapper:
             raise RuntimeError("Enhanced interface not available. Open file with use_enhanced=True")
 
         try:
-            self.simulation.BlockDelete(block_name)
+            with _isolated_vendored_call():
+                self.simulation.BlockDelete(block_name)
             logger.info(f"Deleted block {block_name}")
             return True
         except Exception as e:
@@ -253,7 +285,8 @@ class AspenPlusWrapper:
             raise RuntimeError("Enhanced interface not available. Open file with use_enhanced=True")
 
         try:
-            self.simulation.StreamPlace(stream_name, stream_type)
+            with _isolated_vendored_call():
+                self.simulation.StreamPlace(stream_name, stream_type)
             logger.info(f"Placed stream {stream_name} of type {stream_type}")
             return True
         except Exception as e:
@@ -276,7 +309,8 @@ class AspenPlusWrapper:
             raise RuntimeError("Enhanced interface not available. Open file with use_enhanced=True")
 
         try:
-            self.simulation.StreamConnect(block_name, stream_name, port_name)
+            with _isolated_vendored_call():
+                self.simulation.StreamConnect(block_name, stream_name, port_name)
             logger.info(f"Connected stream {stream_name} to {block_name}.{port_name}")
             return True
         except Exception as e:
@@ -298,10 +332,12 @@ class AspenPlusWrapper:
 
         try:
             if filename:
-                self.simulation.SaveAs(filename)
+                with _isolated_vendored_call():
+                    self.simulation.SaveAs(filename)
                 logger.info(f"Saved simulation as {filename}")
             else:
-                self.simulation.Save()
+                with _isolated_vendored_call():
+                    self.simulation.Save()
                 logger.info("Saved simulation")
             return True
         except Exception as e:

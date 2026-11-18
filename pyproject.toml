@@ -19,8 +19,9 @@ dependencies = [
     "numpy>=1.20.0",  # Required by vendored aspen_interface.py
 ]
 
-# Note: aspen_interface.py is vendored from:
+# Note: aspen_interface.py is vendored (unmodified) from:
 # https://github.com/YouMayCallMeJesus/AspenPlus-Python-Interface
+# It is NOT covered by the MIT license above - see THIRD_PARTY_NOTICES.md
 
 [project.scripts]
 aspenplus-mcp = "aspenplus_mcp.server:run"
