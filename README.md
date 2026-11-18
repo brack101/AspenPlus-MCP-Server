@@ -15,7 +15,7 @@ MCP (Model Context Protocol) server for Aspen Plus process simulation integratio
 - Python 3.10 or higher
 - Windows OS (for Aspen Plus COM interface)
 - Aspen Plus installed
-- pywin32 package
+- [uv](https://docs.astral.sh/uv/) (recommended) – installs Python and all dependencies (incl. pywin32) automatically
 
 ## Installation
 
@@ -25,24 +25,37 @@ git clone <repository-url>
 cd AspenPlus-MCP-Server
 ```
 
-2. Create a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+2. Install uv (if not already installed):
+```powershell
+winget install --id=astral-sh.uv -e
+# or: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-3. Install the package:
+3. Create the environment and install all dependencies:
 ```bash
+uv sync
+```
+This creates a `.venv` in the project folder, installs a suitable Python version if needed, and installs the package in editable mode (incl. dev tools).
+
+<details>
+<summary>Alternative: plain pip</summary>
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate        # Linux/macOS: source .venv/bin/activate
 pip install -e .
 ```
+</details>
 
 ## Usage
 
 ### Running the Server
 
 ```bash
-python -m aspenplus_mcp.server
+uv run aspenplus-mcp
 ```
+
+The server communicates via stdio and is normally started by the MCP client (see below), not manually.
 
 ### Available Tools
 
@@ -75,39 +88,55 @@ python -m aspenplus_mcp.server
 
 ## Development
 
-Install development dependencies:
-```bash
-pip install -e ".[dev]"
-```
+`uv sync` already installs the dev dependencies (pytest, black, mypy).
 
 Run tests:
 ```bash
-pytest
+uv run pytest
 ```
 
 Format code:
 ```bash
-black src/
+uv run black src/
 ```
 
-## Configuration with Claude Desktop
+Add a dependency:
+```bash
+uv add <package>          # runtime dependency
+uv add --dev <package>    # dev dependency
+```
 
-Add to your Claude Desktop config file:
+## Configuration with Claude
+
+In all examples, replace `C:\\path\\to\\AspenPlus-MCP-Server` with the absolute path to your clone of this repository. `uv run` creates/updates the environment automatically on first start, so a prior `uv sync` is optional.
+
+### Claude Code
+
+```powershell
+claude mcp add aspenplus --scope user -- uv --directory "C:\path\to\AspenPlus-MCP-Server" run aspenplus-mcp
+```
+
+- `--scope user` makes the server available in all projects; omit it (default `local`) to register it only for the current project, or use `--scope project` to write it to a shared `.mcp.json`.
+- Check the connection with `claude mcp list` or `/mcp` inside Claude Code.
+
+### Claude Desktop
+
+Add to your Claude Desktop config file (Settings → Developer → Edit Config):
 
 **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 
 **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
-**Linux**: `~/.config/Claude/claude_desktop_config.json`
-
 ```json
 {
   "mcpServers": {
     "aspenplus": {
-      "command": "C:\\path\\to\\AspenPlus-MCP-Server\\venv\\Scripts\\python.exe",
+      "command": "uv",
       "args": [
-        "-m",
-        "aspenplus_mcp.server"
+        "--directory",
+        "C:\\path\\to\\AspenPlus-MCP-Server",
+        "run",
+        "aspenplus-mcp"
       ]
     }
   }
@@ -115,10 +144,25 @@ Add to your Claude Desktop config file:
 ```
 
 **Important Notes:**
-- Use the **full absolute path** to your virtual environment's Python executable
-- On Windows, use double backslashes (`\\`) in paths or forward slashes (`/`)
-- After editing the config file, restart Claude Desktop completely
-- The MCP server will start automatically when Claude Desktop launches
+- In JSON, use double backslashes (`\\`) or forward slashes (`/`) in paths
+- If Claude Desktop cannot find `uv`, use its full path as `command` (find it with `where uv`, e.g. `C:\\Users\\<you>\\.local\\bin\\uv.exe`)
+- After editing the config file, fully quit and restart Claude Desktop (also from the system tray)
+- The MCP server starts automatically when Claude Desktop launches
+
+<details>
+<summary>Alternative without uv (pip installation)</summary>
+
+```json
+{
+  "mcpServers": {
+    "aspenplus": {
+      "command": "C:\\path\\to\\AspenPlus-MCP-Server\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "aspenplus_mcp.server"]
+    }
+  }
+}
+```
+</details>
 
 ## Usage Examples
 

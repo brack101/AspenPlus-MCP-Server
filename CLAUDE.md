@@ -10,24 +10,24 @@ AspenPlusMCP - A Model Context Protocol (MCP) server for Aspen Plus integration.
 
 ### Setup
 ```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+# Create .venv and install package (editable) + dev dependencies
+uv sync
 
-# Install package in development mode
-pip install -e ".[dev]"
+# Add dependencies
+uv add <package>          # runtime
+uv add --dev <package>    # dev (dependency-groups)
 ```
 
 ### Running
 ```bash
 # Run the MCP server
-python -m aspenplus_mcp.server
+uv run aspenplus-mcp
 
 # Run tests
-pytest
+uv run pytest
 
 # Format code
-black src/
+uv run black src/
 ```
 
 ## Architecture
